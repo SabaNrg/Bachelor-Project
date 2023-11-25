@@ -1,0 +1,84 @@
+! wget https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data
+import random
+
+import pandas as pd
+import numpy as np
+from sklearn import preprocessing
+from sklearn.svm import LinearSVC
+from sklearn.tree import DecisionTreeClassifier
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+seed_value = 0
+
+random.seed(seed_value)
+np.random.seed(seed_value)
+tf.random.set_seed(seed_value)
+data =  pd.read_csv('wdbc.data', header=None)
+data
+data_y = data[1]
+data_x = data[range(2,32)]
+def bin(x):
+  if x == "M":
+    return [0, 1]
+  return [1, 0]
+
+def to_binary_one_hot(data):
+  return np.array([bin(xi) for xi in data])
+
+data_y_one_hot = to_binary_one_hot(data_y)
+scaler = preprocessing.StandardScaler().fit(data_x)
+data_x = scaler.transform(data_x)
+split = 0.8
+split_pt = int(data_x.shape[0] * split)
+x_train = data_x[:split_pt]
+x_test = data_x[split_pt:]
+y_train = data_y[:split_pt]
+y_test = data_y[split_pt:]
+y_train_one_hot = data_y_one_hot[:split_pt]
+y_test_one_hot = data_y_one_hot[split_pt:]
+
+# NN
+data_x.shape
+model = keras.Sequential()
+model.add(keras.Input(shape=(30,)))
+model.add(layers.Dense(30, activation="relu"))
+model.add(layers.Dense(20, activation="relu"))
+model.add(layers.Dense(10, activation="relu"))
+model.add(layers.Dense(2, activation="relu"))
+model.add(layers.Softmax())
+model.summary()
+model.compile(
+    optimizer=keras.optimizers.RMSprop(),  # Optimizer
+    loss=keras.losses.CategoricalCrossentropy(),
+    metrics=[keras.metrics.CategoricalCrossentropy(), keras.metrics.CategoricalAccuracy()],
+)
+
+history = model.fit(
+    x_train,
+    y_train_one_hot,
+    batch_size=16,
+    epochs=100,
+)
+results = model.evaluate(x_test, y_test_one_hot, batch_size=16)
+print("Categorical Accuracy: ", results[2])
+predict = model.predict(x_test).argmax(axis=-1)
+nn_pred = np.array(['B' if xi == 0 else 'M' for xi in predict])
+# Decision Tree
+clf = DecisionTreeClassifier(random_state=seed_value, criterion="entropy")
+clf = clf.fit(x_train, y_train)
+clf.score(x_test, y_test)
+dt_pred = clf.predict(x_test)
+dt_pred
+#SVM
+clf = LinearSVC(random_state=seed_value, tol=1e-5)
+clf = clf.fit(x_train, y_train)
+clf.score(x_test, y_test)
+svm_pred = clf.predict(x_test)
+# Ensemble
+
+pred_ens = (to_binary_one_hot(dt_pred) + to_binary_one_hot(nn_pred) + to_binary_one_hot(svm_pred)).argmax(axis=-1)
+pred_ens = np.array(['B' if xi == 0 else 'M' for xi in pred_ens])
+pred_ens
+tf_clf_res = (np.array(y_test) == pred_ens)
+print("Voting Accuracy: ", tf_clf_res.sum() / tf_clf_res.shape[0])
